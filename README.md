@@ -4,6 +4,17 @@ __Udemy__
 
 <https://www.udemy.com/course/terraform-beginner-to-advanced/>
 
+## Section 1: Introduction
+## Section 2: Getting Started & Setting Up Labs
+## Section 3: Deploying Infrastructure with Terraform 
+## Section 4: Read, Genearate, Modify Configurations
+## Section 5: Terraform Provisioners
+## Section 6: Terraform Modules & Workspaces
+## Section 7: Remote State Management 
+## Section 8: Security Primer
+## Section 9: Terraform Cloud & Enterprise Capabilities
+## Section 10: Exam Preparation Section
+
 __Notes__
 
 Notes - Deploying Infrastructure with Terraform 
@@ -29,14 +40,3 @@ Document - Terraform Cloud Backend
 
 Notes - Important Pointers for Exams
 <https://docs.google.com/document/d/1bgeX2W_f2BQ1uGlNZR5yIk9KUxnPK-VUQs_Hax3mPi0/edit?usp=sharing>
-
-## Section 1: Introduction
-## Section 2: Getting Started & Setting Up Labs
-## Section 3: Deploying Infrastructure with Terraform 
-## Section 4: Read, Genearate, Modify Configurations
-## Section 5: Terraform Provisioners
-## Section 6: Terraform Modules & Workspaces
-## Section 7: Remote State Management 
-## Section 8: Security Primer
-## Section 9: Terraform Cloud & Enterprise Capabilities
-## Section 10: Exam Preparation Section
