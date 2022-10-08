@@ -1,8 +1,4 @@
-provider "aws" {
-  region = "us-west-2"
-  # access_key = ""
-  # secret_key = ""
-}
+# Check provider_version.tf file for provider configuration
 
 resource "aws_instance" "web" {
     ami = "ami-08e2d37b6a0129927"
