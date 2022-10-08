@@ -1,24 +1,115 @@
 # Terraform Provisioners
 
-Provisioners can be used to model specific actions on the local machine or on a remote machine in order to prepare servers or other infrastructure objects for service.
+- Provisioners can be used to model specific actions on the local machine or on a remote machine in order to prepare servers or other infrastructure objects for service.
 
-Provisioners can excute scipts on a local or remote machine as part of resource creation or destruction. for example, on creating an ec2 instance execute a script which installs Nginx web-server.
+- Provisioners can excute scipts on a local or remote machine as part of resource creation or destruction. for example, on creating an ec2 instance execute a script which installs Nginx web-server.
 
-## Creation-Time Provisioners
+  Example: On creation of a web server execute scripts to install Nginx
 
-By default, provisioners run when the resource they are defined within is created. Creation-time provisioners are only run during creation, not during updating or any other lifecycle. They are meant as a means to perform bootstrapping of a system.
+---
 
-If a creation-time provisioner fails, the resource is marked as __tainted__. A tainted resource will be planned for destruction and recreation upon the next `terraform apply`. 
+# Types of Provisioners
 
-Terraform does this because a failed provisioner can leave a resource in a semi-configured state. Because Terraform cannot reason about what the provisioner does, the only way to ensure proper creation of a resource is to recreate it. This is tainting.You can change this behavior by setting the `on_failure` attribute.
+Terraform has capability to turn provisioners both at the time of creation as well as destruction
 
-## The `self` Object
-Expressions in provisioner blocks cannot refer to their parent resource by name. Instead, they can use the special `self` object.
+There are two main types of provisioners
+- `local-exec`
+- `remote-exec`
 
-The `self` object represents the provisioner's parent resource, and has all of that resource's attributes. For example, use `self.public_ip` to reference an `aws_instance`'s `public_ip` attribute.
+## `local-exec` Provisioner
 
->Technical note: Resource references are restricted here because references create dependencies. Referring to a resource by name within its own block would create a dependency cycle.
+- The `local-exec` provisioner invokes a local executable after a resource is created. 
+- This invokes a process on the machine running Terraform, not on the resource. 
 
+- one useful usecase of `local-exec` is to execute __ansible-playbooks__ once the resource is created.
+
+```
+resource "aws_instance" "web" {
+  # ...
+
+  provisioner "local-exec" {
+    command = "echo ${self.private_ip} >> private_ips.txt"
+  }
+}
+```
+
+## `remote-exec` Provisioner
+
+- The `remote-exec` provisioner allows to invoke a script directly on a remote server. 
+- This can be used to run a configuration management tool, bootstrap into a cluster, etc.
+- The `remote-exec` provisioner requires a connection and supports both `ssh` and `winrm`.
+
+
+
+## Other Provisioners types
+
+### `chef` Provisioner
+### `habitat` Provisioner
+### `puppet` Provisioner
+### `salt-masterless` Provisioner
+
+---
+
+# Implementing `remote-exec` provisioners
+
+Documentation: 
+<https://developer.hashicorp.com/terraform/language/resources/provisioners/remote-exec?optInFrom=terraform-io>
+
+- The `remote-exec` provisioner invokes a script on a remote resource after it is created. 
+- Create a keypair in AWS  (`private-key`), this is required to ssh into the server
+
+
+```
+resource "aws_instance" "myec2" {
+
+    ami = "ami-00f7e5c52c0f43726"
+    instance_type = "t2.micro"
+    key_name = "private-key"
+
+    # Establishes connection to be used by all 
+    # generic remote provisioners (i.e. file/remote-exec)
+    connection {
+        type        = "ssh"
+        user        = "ec2_user"
+        private_key = file("./private-key.pem") 
+        host        = self.public_ip
+    }
+
+    provisioner "remote-exec" {
+        inline = [
+            "sudo amazon-linux-extras install -y nginx1",
+            "sudo systemctl start nginx",
+        ]
+    }
+}
+```
+
+---
+# Implementing `local-exec` provisioners
+- `local-exec` provisioner allows us to invoke a local executable after the resource is created
+- One of the most used apporach of local-exec provisioner is to run ansible-playbooks on the created server after the resource is created.
+
+```
+resource "aws_instance" "myec2" {
+  ami = "ami-00f7e5c52c0f43726"
+  instance_type = "t2.micro"
+
+  provisioner "local-exec" {
+    command = "echo ${aws_instance.myec2.private_ip} >> private_ips.txt"
+  }
+}
+```
+
+
+---
+# Creation-Time & Destroy-Time Provisioners
+
+There are two primary types of provisioners
+
+| Type | Description |
+|-|-|
+| Creation-Time | Creation-time provisioners are only run during creation, not during updating or any other lifecycle. If a creation-time provisioner fails, the resource is marked as tainted. |
+| Destroy-Time | Destroy-time provisioners are run before the resource is destroyed |
 
 ## Destroy-Time Provisioners
 
@@ -39,12 +130,33 @@ Destroy provisioners are run before the resource is destroyed. If they fail, Ter
 
 >NOTE: A destroy-time provisioner within a resource that is tainted will not run. This includes resources that are marked tainted from a failed creation-time provisioner or tainted manually using terraform taint.
 
+## Creation-Time Provisioners
+
+- By default, provisioners run when the resource they are defined within is created. Creation-time provisioners are only run during creation, not during updating or any other lifecycle. They are meant as a means to perform bootstrapping of a system.
+
+- If a creation-time provisioner fails, the resource is marked as __tainted__. A tainted resource will be planned for destruction and recreation upon the next `terraform apply`. 
+
+- Terraform does this because a failed provisioner can leave a resource in a semi-configured state. Because Terraform cannot reason about what the provisioner does, the only way to ensure proper creation of a resource is to recreate it. This is tainting. You can change this behavior by setting the `on_failure` attribute.
+
+## The `self` Object
+Expressions in provisioner blocks cannot refer to their parent resource by name. Instead, they can use the special `self` object.
+
+The `self` object represents the provisioner's parent resource, and has all of that resource's attributes. For example, use `self.public_ip` to reference an `aws_instance`'s `public_ip` attribute.
+
+>Technical note: Resource references are restricted here because references create dependencies. Referring to a resource by name within its own block would create a dependency cycle.
+
+---
+# Failure Behaviour for Provisioners
+
 ## Failure Behavior
 
-By default, provisioners that fail will also cause the Terraform apply itself to fail. The `on_failure` setting can be used to change this. The allowed values are:
+By default, provisioners that fail will also cause the Terraform apply itself to fail. The `on_failure` setting can be used to change this. 
 
-- `continue` - Ignore the error and continue with creation or destruction.
-- `fail` - Raise an error and stop applying (the default behavior). If this is a creation provisioner, taint the resource.
+The allowed values are:
+| | |
+|-|-|
+| `continue` | Ignore the error and continue with creation or destruction. |
+| `fail` | Raise an error and stop applying (the default behavior). If this is a creation provisioner, taint the resource. |
 
 Example
 ```
@@ -57,126 +169,51 @@ resource "aws_instance" "web" {
   }
 }
 ```
+---
+# `null_resource`
 
-## Generic Provisioners
-
-### `file`
-
-The `file` provisioner is used to copy files or directories from the machine executing Terraform to the newly created resource. The `file` provisioner supports both `ssh` and `winrm` type connections.
-
->Note: Provisioners should only be used as a last resort. For most common situations there are better alternatives.
+The `null_resource` implements the standard resource lifecycle but takes no futher action
 
 Example
 
 ```
-resource "aws_instance" "web" {
-  # ...
-
-  # Copies the myapp.conf file to /etc/myapp.conf
-  provisioner "file" {
-    source      = "conf/myapp.conf"
-    destination = "/etc/myapp.conf"
-  }
-
-  # Copies the string in content into /tmp/file.log
-  provisioner "file" {
-    content     = "ami used: ${self.ami}"
-    destination = "/tmp/file.log"
-  }
-
-  # Copies the configs.d folder to /etc/configs.d
-  provisioner "file" {
-    source      = "conf/configs.d"
-    destination = "/etc"
-  }
-
-  # Copies all files and folders in apps/app1 to D:/IIS/webapp1
-  provisioner "file" {
-    source      = "apps/app1/"
-    destination = "D:/IIS/webapp1"
-  }
+resource "aws_eip" "lb" {
+  vpc = true
+  depends_on = [null_resource.health_check] 
 }
-```
 
-
-### `local-exec` Provisioner
-
-The `local-exec` provisioner invokes a local executable after a resource is created. This invokes a process on the machine running Terraform, not on the resource. 
-
-one most useful approach of local-exec is to run ansible-playbooks on the created server after the resource is created.
-
-```
-resource "aws_instance" "web" {
-  # ...
+# null resource
+resource "null_resource" "health_check" {
 
   provisioner "local-exec" {
-    command = "echo ${self.private_ip} >> private_ips.txt"
+    command = "curl https://google.com"
+    # useful in checking the dependencies before creating resources
   }
 }
-```
-
-### `remote-exec` Provisioner
-
-The `remote-exec` provisioner invokes a script on a remote resource after it is created. This can be used to run a configuration management tool, bootstrap into a cluster, etc.
-
-The `remote-exec` provisioner requires a connection and supports both `ssh` and `winrm`.
-
-Example 
 
 ```
-resource "aws_instance" "web" {
-  # ...
 
-  # Establishes connection to be used by all 
-  # generic remote provisioners (i.e. file/remote-exec)
-  connection {
-    type     = "ssh"
-    user     = "root"
-    password = var.root_password
-    host     = self.public_ip
-  }
-
-  provisioner "remote-exec" {
-    inline = [
-      "puppet apply",
-      "consul join ${aws_instance.web.private_ip}",
-    ]
-  }
-}
-```
+The `triggers` argument allows specifying an arbitrary set of values that, when changed, will cause the resource to be replaced.
+- `triggers` (Map of String) A map of arbitrary strings that, when changed, will force the null resource to be replaced, re-running any associated provisioners.
 
 Example
-
-- Create a keypair in AWS
-
 ```
-resource "aws_instance" "myec2" {
-
-    ami = "ami-00f7e5c52c0f43726"
-    instance_type = "t2.micro"
-    keyname = "keypair"
-
-    # Establishes connection to be used by all 
-    # generic remote provisioners (i.e. file/remote-exec)
-    connection {
-        type        = "ssh"
-        user        = "ec2_user"
-        privatekey  = file(./keypair.pem)
-        host        = self.public_ip
-    }
-
-    provisioner "remote-exec" {
-        inline = [
-            "sudo amazon-linux-extras install -y nginx1.12",
-            "sudo systemctl start nginx",
-        ]
-    }
+resource "aws_eip" "lb" {
+  vpc   = true
+  count = 1               
+  # changing count will activate trigger and provisioner will rerun
 }
+
+resource "null_resource" "ip_check" {
+
+  triggers = {
+    latest_ips = join(",", aws_eip.lb[*].public_ip)
+  }
+
+  provisioner "local-exec" {
+    command = "echo Latest IPs are ${null_resource.ip_check.triggers.latest_ips}" > sample.txt"
+  }
+}
+
 ```
-
-## Vendor Provisioners
-
-### `chef` Provisioner
-### `habitat` Provisioner
-### `puppet` Provisioner
-### `salt-masterless` Provisioner
+---
