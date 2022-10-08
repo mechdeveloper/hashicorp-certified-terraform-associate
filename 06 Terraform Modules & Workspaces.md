@@ -1,176 +1,240 @@
-# Terraform Modules
+# DRY Principle
+`DRY` Don't Repeat Yourself, is a priciple in software development aimed at reducing repetition of software patterns.
 
-`DRY` Don't Repeat Yourself, is a priciple in software development aimed at reducing repetition of of software patterns.
+We can centralize the terraform resources and can call out from TF files whenever required.
 
-Modules are containers for multiple resources that are used together. A module consists of a collection of .tf and/or .tf.json files kept together in a directory.
+---
+# Implementing EC2 module with Terraform
 
-Modules are the main way to package and reuse resource configurations with Terraform.
+Folder Structure
+```
+modules
+|..ec2
+   |..ec2.tf
+projects
+|..project-a
+   |..myec2.tf
+   |..providers.tf
+```
 
-## The Root Module
+`modules/ec2/ec2.tf`
+```
+resource "aws_instance" "myec2" {
+    ami = "ami-08e2d37b6a0129927"
+    instance_type = "t2.micro"
+}
+```
 
-Every Terraform configuration has at least one module, known as its root module, which consists of the resources defined in the `.tf` files in the main working directory.
+`proejcts/project-a/myec2.tf`
+```
+module "ec2module" {
+    source = "../../modules/ec2"
+}
+```
 
-## Child Modules
+`terraform init` is required to initialize modules, backend, provider plugins
+```
+terraform init
+```
 
-A Terraform module (usually the root module of a configuration) can call other modules to include their resources into the configuration. A module that has been called by another module is often referred to as a child module.
+---
+# Variables and Terraform Modules
 
-Child modules can be called multiple times within the same configuration, and multiple configurations can use the same child module.
 
-## Published Modules
+Folder Structure
+```
+modules
+|..ec2
+   |..ec2.tf
+   |..variables.tf
+projects
+|..project-a
+   |..myec2.tf
+   |..providers.tf
+```
 
-In addition to modules from the local filesystem, Terraform can load modules from a public or private registry. This makes it possible to publish modules for others to use, and to use modules that others have published.
+`modules/ec2/ec2.tf`
+```
+resource "aws_instance" "myec2" {
+    ami = "ami-08e2d37b6a0129927"
+    instance_type = var.instance_type   # referencing variable
+}
+```
 
-### Terraform Registry
+`modules/ec2/variables.tf`
+```
+variable "instance_type" {
+  default = "t2.micro"
+}
+```
+
+`proejcts/project-a/myec2.tf`
+```
+module "ec2module" {
+    source = "../../modules/ec2"
+    instance_type = "t2.large"
+}
+```
+
+`terraform plan` will now pickup the value `t2.large` specified in project as variables allow users to override them.
+```
+terraform plan
+...
+  + instance_type                        = "t2.large"
+...
+```
+
+---
+
+# Using Locals with Modules
+
+- Instead of variables, `locals` to assign the values.
+- `locals` can be used to prevent users from overriding values for your terraform modules
+
+
+```
+resource "aws_security_group" "ec2-sg" {
+  name = "myec2-sg"
+
+  ingress {
+    description   = "Allow Inbound from Secret Application"
+    from_port     = local.app_port
+    to_port       = local.app_port
+    protocol      = "tcp"
+    cidr_blocks   = ["0.0.0.0/0"]
+  }
+}
+
+locals {
+  app_port = 8444
+}
+```
+---
+# Referencing Module Outputs
+
+- Output values make information about your infrastructure available on the command line, and can expose information for other Terraform configurations to use.
+
+## Accessing Child Module Outputs
+In a parent module, outputs of child modules are available in expressions as `module.<MODULE_NAME>.<OUTPUT_NAME>`
+
+Example: referencing output in a root module from a child module
+```
+moduel "sgmodule" {
+  source = "../../modules/sg"
+}
+
+resource "aws_instance" "web" {
+    ami             = "ami-08e2d37b6a0129927"
+    instance_type   = "t3.micro"
+    vpc_security_group_ids = [module.sgmodule.sg_id]
+}
+```
+
+`modules/sg/sg.tf` - child module with output
+```
+...
+
+output "sg_id" {
+  value = aws_security_group.ec2-sg.arn
+}
+```
+
+---
+# Terraform Registry
 
 The Terraform Registry <https://registry.terraform.io/browse/modules> hosts a broad collection of publicly available Terraform modules for configuring many kinds of common infrastructure. These modules are free to use, and Terraform can download them automatically if you specify the appropriate source and version in a module call block.
 
 Also, members of your organization might produce modules specifically crafted for your own infrastructure needs. Terraform Cloud and Terraform Enterprise both include a private module registry for sharing modules internally within your organization.
 
-#### Verified Modules in Terraform Registry
-Within Terraform registry you can find verified modules that are maintained by various third party vendors.
+## Verified Modules in Terraform Registry
+- Within Terraform registry you can find verified modules that are maintained by various third party vendors.
 
-Verified modules are reviewd by HashiCorp and actively maintained by contributors to stay up-to-date and compatible with both Terraform and their respective providers.
+- Verified modules are reviewd by HashiCorp and actively maintained by contributors to stay up-to-date and compatible with both Terraform and their respective providers.
 
-The blue verificaton badge appears next to modules that are verified.
+- The blue verificaton badge appears next to modules that are verified.
 
-Module verification is currently a manual process restricted to a small group of trusted HashiCorp partners.
+- Module verification is currently a manual process restricted to a small group of trusted HashiCorp partners.
 
-Verified Module Example - <https://registry.terraform.io/modules/terraform-aws-modules/ec2-instance/aws/latest>
+- Verified Module Example - <https://registry.terraform.io/modules/terraform-aws-modules/ec2-instance/aws/latest>
 
-## Using Modules
+## Using Registry Module in Terraform
 
-### Module Blocks
+- To use Terraform Registry module within the code, we can make use of the source argument that contains the module path.
+- Below code references to the EC2 Instance module within terraform registry
 
-__Calling a Child Module__
+  ```hcl
+  module "ec2-instance" {
+    source = "terraform-aws-modules/ec2-instance/aws"
+    version = "4.1.4"
 
-To call a module means to include the contents of that module into the configuration with specific values for its input variables. Modules are called from within other modules using `module` blocks:
+    for_each = toset(["one", "two", "three"])
 
-```
-module "servers" {
-  source = "./app-cluster"
+    name = "instance-${each.key}"
 
-  servers = 5
-}
-```
+    ami                    = "ami-08e2d37b6a0129927"
+    instance_type          = "t2.micro"
+    subnet_id              = "subnet-eddcdzz4"
 
-A module that includes a module block like this is the calling module of the child module.
-
-The label immediately after the `module` keyword is a local name, which the calling module can use to refer to this instance of the module.
-
-Within the block body are the arguments for the module. Module calls use the following kinds of arguments:
-
-- The `source` argument is mandatory for all modules.
-- The `version` argument is recommended for modules from a registry.
-- Most other arguments correspond to input variables defined by the module. (The `servers` argument in the example above is one of these.)
-- Terraform defines a few other meta-arguments that can be used with all modules, including `for_each` and `depends_on`.
-
-__Source__
-
-All modules require a `source` argument, which is a meta-argument defined by Terraform. Its value is either the 
-- path to a local directory containing the module's configuration files, or a 
-- remote module source that Terraform should download and use.
-
-The same source address can be specified in multiple module blocks to create multiple copies of the resources defined within, possibly with different variable values.
-
-After adding, removing, or modifying `module` blocks, you must re-run `terraform init` to allow Terraform the opportunity to adjust the installed modules. By default this command will not upgrade an already-installed module; use the `-upgrade` option to instead upgrade to the newest available version.
-
-Local Paths
-```
-module "consul" {
-  source = "./consul"
-}
-```
-
-Terraform Registry
-```
-module "consul" {
-  source = "hashicorp/consul/aws"
-  version = "0.1.0"
-}
-```
-
-__Version__
-
-When using modules installed from a module registry, we recommend explicitly constraining the acceptable version numbers to avoid unexpected or unwanted changes.
-
-Use the version argument in the module block to specify versions:
-
-```
-module "consul" {
-  source  = "hashicorp/consul/aws"
-  version = "0.0.5"
-
-  servers = 3
-}
-```
-
-The version argument accepts a version constraint string. Terraform will use the newest installed version of the module that meets the constraint; if no acceptable versions are installed, it will download the newest version that meets the constraint.
-
-Version constraints are supported only for modules installed from a module registry, such as the public Terraform Registry or Terraform Cloud's private module registry. Other module sources can provide their own versioning mechanisms within the source string itself, or might not support versions at all. In particular, modules sourced from local file paths do not support `version`; since they're loaded from the same source repository, they always share the same version as their caller.
-
-__Meta-arguments__
-
-Along with `source` and `version`, Terraform defines a few more optional meta-arguments that have special meaning across all modules 
-
-- `count` - Creates multiple instances of a module from a single `module` block.
-- `for_each` - Creates multiple instances of a module from a single `module` block.
-- `providers` - Passes provider configurations to a child module. If not specified, the child module inherits all of the default (un-aliased) provider configurations from the calling module.
-- `depends_on` - Creates explicit dependencies between the entire module and the listed targets.
-
-In addition to the above, the `lifecycle` argument is not currently used by Terraform but is reserved for planned future features.
-
-Example - Reference a local path module
-
-- `modules` folder
-  - `ec2.tf`
-
-- `projects` folder
-  - `ProjectA` folder
-    - `myec2.tf`
-      ```
-      # Rererences module in local path
-      module "ec2module" {
-        source = "../../modules/ec2"
-      }
-      ```
-
-
-- `terraform init` is required to initalize modules.
-  ```
-  terraform init
-  ```
-
-- `terraform plan` will now show the resources via modules
-  ```
-  terraform plan
-  ```
-
-Example - Reference a verified module from terraform registry
-
-```
-provider "aws" {
-    region = "us-west-2"
-}
-
-module "ec2_instance" {
-  source  = "terraform-aws-modules/ec2-instance/aws"
-  version = "~> 3.0"
-
-  name = "single-instance"
-
-  ami                    = "ami-00f7e5c52c0f43726"
-  instance_type          = "t2.micro"
-  
-  # make sure subnet_id is correct from aws console
-  subnet_id              = "subnet-eddcdzz4" 
-
-  tags = {
-    Terraform   = "true"
-    Environment = "dev"
+    tags = {
+      Terraform   = "true"
+      Environment = "dev"
+    }
   }
-}
+  ```
+---
+# Publishing Modules in Terraform Registry
+
+- Anyone can publish and share modules on the Terraform Registry
+- Published modules support versioning, automatically generate documentation, allow browsing version histories, show example and READMEs, and more
+
+## Requirements for publishing module
+
+| Requirement | Description |
+|-|-|
+| Github | The module must be on GitHub and must be a public repo. This is only a requirement for the public registry |
+| Named | Module repositories must use this three-par name format `terraform-<PROVIDER>-<NAME>` |
+| Repository Description | The GitHub repository description is used to populate the short description of the module |
+| Standard module structure | The module must adhere to the standard module structure |
+| x.y.z tags for releases | The registry uses tags to identify module versions. Release tag names must be a semantic version, which can optionally be prefixed with a v. For example v1.0.4 and 0.9.2 |
+
+## Standard Module Structure
+
+The standard module structure is a file and directory layout that is recommended for reusable modules distributed in separate repositories
+
+
+`minimal-module`
+```
+.
+|-- README.md
+|-- main.tf
+|-- variables.tf
+|-- outputs.tf
 ```
 
+`complete-module`
+```
+.
+|-- README.md
+|-- main.tf
+|-- variables.tf
+|-- outputs.tf
+|-- ...
+|-- modules/
+|  |-- nestedA/
+|  |   |-- README.md
+|  |   |-- main.tf
+|  |   |-- variables.tf
+|  |   |-- outputs.tf
+|  |-- nestedB/
+|  |-- .../
+|-- examples/
+|  |-- exampleA/
+|  |   |-- main.tf
+|  |-- exampleB/
+|  |-- .../
+```
+
+--- 
 # Terraform Workspaces
 
 Terraform allows us to have multiple workspaces, with each of the workspace we can have different set of environment variables associated
@@ -230,6 +294,8 @@ Following will be the folder structure
   - `terraform.tfstate` file for default workspace
   - `terraform.workspace.d` folder
     - `dev` folder
-      - `terraform.tfstate` for dev workspace
+      - `terraform.tfstate` for `dev` workspace
     - `prod` folder
-      - `terraform.tfstate` for prod workspace
+      - `terraform.tfstate` for `prod` workspace
+
+---
