@@ -52,7 +52,7 @@ export AWS_DEFAULT_REGION="us-west-2"
 
 - Check docs for ec2 instance
 
-<https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance>
+  <https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance>
 
 
 - `resource` block
@@ -65,9 +65,56 @@ resource "aws_instance" "myec2" {
 ```
 
 - `terraform init`
+
+```bash
+terraform init
+
+Initializing the backend...
+
+Initializing provider plugins...
+- Finding latest version of hashicorp/aws...
+- Installing hashicorp/aws v4.34.0...
+- Installed hashicorp/aws v4.34.0 (signed by HashiCorp)
+
+Terraform has created a lock file .terraform.lock.hcl to record the provider
+selections it made above. Include this file in your version control repository
+so that Terraform can guarantee to make the same selections by default when
+you run "terraform init" in the future.
+
+Terraform has been successfully initialized!
+
+You may now begin working with Terraform. Try running "terraform plan" to see
+any changes that are required for your infrastructure. All Terraform commands
+should now work.
+
+If you ever set or change modules or backend configuration for Terraform,
+rerun this command to reinitialize your working directory. If you forget, other
+commands will detect it and remind you to do so if necessary.
+```
+
 - `terraform plan`
+  - generates the execution plan
+  - indicates Resource actions
+  - Note: You didn't use the -out option to save this plan, so Terraform can't guarantee to take exactly these actions if you run "terraform apply" now.
 - `terraform apply`
-  - yes
+  - Enter `yes` when asked to perform the actions
+    ```bash
+    ...
+    Plan: 1 to add, 0 to change, 0 to destroy.
+
+    Do you want to perform these actions?
+      Terraform will perform the actions described above.
+      Only 'yes' will be accepted to approve.
+
+      Enter a value: yes
+
+    aws_instance.web: Creating...
+    aws_instance.web: Still creating... [10s elapsed]
+    aws_instance.web: Still creating... [20s elapsed]
+    aws_instance.web: Still creating... [30s elapsed]
+    aws_instance.web: Creation complete after 34s [id=i-0a2f5b4bf96c2e2ad]
+    ```
+  
 
 ## Providers & Resources
 
