@@ -196,9 +196,6 @@
 
 ## Updated - Important Pointers for Exams
 Important Note:
-
-Terraform Exams are updated regularly. Whenever there is a new update released in exams, there are certain topics that you will notice that are not part of the course. In the mean-time, we have created a document that has all of these deltas topics.
-
 1. Requirements for publishing module in Terraform Registry
 
     Ensure that you know the list of requirements for publishing modules in the Terraform registry.
